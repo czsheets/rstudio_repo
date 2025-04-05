@@ -1,0 +1,316 @@
+---
+title: "Liability Matched Portfolio"
+format: revealjs
+editor: visual
+theme: default
+---
+
+## Introduction
+
+-   **Topic**: Shifting focus to a Liability Matched Portfolio (*LMP*)
+-   **Goal**: Discuss the requirements, risks, and benefits of liability matching
+-   **Recommendation**: Create a partially inflation-protected self-driven annuity
+
+------------------------------------------------------------------------
+
+## What is a Liability Matched Portfolio?
+
+-   A portfolio designed to match future liabilities (retirement income needs) with specific assets
+-   **Key elements**:
+    -   Liability matching with **TIPS** and **STRIPS**
+    -   Strategy for creating a “spending floor” for long-term security
+    -   Takes into account future Social Security estimates
+    -   Allocation of remaining assets into a **global stock fund**
+
+------------------------------------------------------------------------
+
+## Benefits of an LMP
+
+### 1. Establish a "Spending Floor"
+
+-   Partially **inflation-protected, self-driven annuity** to cover essential expenses for the next 30-35 years
+
+### 2. Costs Covered for \~30 Years
+
+-   By matching liabilities today, attempts to ensure that ***estimated*** **fixed expenses** are covered
+
+### 3. Maintains liquidity
+
+-   Unlike an annuity, you retain control of bond funds
+-   Can be used in an emergency
+
+------------------------------------------------------------------------
+
+## Benefits of an LMP (cont)
+
+### 4. Minimizes additional decision-making or concern
+
+-   Moving to bonds and global-weighted stock portfolio simplifies effort and attention on future portfolio.
+
+### 5. Address Sequence of Returns Risk (SORR)
+
+-   **Bond Tent**: A strategy to use a combination of bonds (TIPS, STRIPS) and stocks to avoid the risks associated with poor returns early in retirement.
+
+------------------------------------------------------------------------
+
+## Benefits of an LMP (cont)
+
+```{r}
+# Example of a simple plot showing the effect of SORR 
+# years <- seq(1, 30, by=1)
+# stock_returns <- rnorm(30, mean=7, sd=15) # Simulating stock returns
+# bond_returns <- rnorm(30, mean=3, sd=5) # Simulating bond returns
+# 
+# plot(years, 
+#      cumsum(stock_returns), 
+#      type="l", 
+#      col="blue", 
+#      ylim=c(-100, 500), 
+#      ylab="Portfolio Value", 
+#      xlab="Years", 
+#      main="Effect of Sequence of Returns Risk") 
+# lines(years, cumsum(bond_returns), col="red") 
+# legend("topright", legend=c("Stocks", "Bonds"), fill=c("blue", "red"))
+
+
+library(tidyverse)
+library(scales)
+library(plotly)
+set.seed(1961)
+annual_results <- data.frame(LMP = 2.75e6,
+                             unlucky = 2.75e6,
+                             lucky = 2.75e6)
+spend = 100000
+bad_results <- rnorm(5, 0, .06)
+medium_results <- rnorm(30, .03, .06)
+good_results <- rnorm(5, .12, .06)
+for(i in 2:41){
+  # spend <- spend * (1.03)
+  LMP <- annual_results$LMP[i-1] * (1.02 + rnorm(1, .01, .03)) - spend
+  if(i < 7){
+    unlucky <- annual_results$unlucky[i-1] * (1 + bad_results[i-1]) - spend
+    lucky <- annual_results$lucky[i-1] * (1 + good_results[i-1]) - spend
+  } else if(i < 37){
+    unlucky <- annual_results$unlucky[i-1] * (1 + medium_results[i-6]) - spend
+    lucky <- annual_results$lucky[i-1] * (1 + medium_results[i-6]) - spend
+  } else {
+    unlucky <- annual_results$unlucky[i-1] * (1 + good_results[i-36]) - spend
+    lucky <- annual_results$lucky[i-1] * (1 + bad_results[i-36]) - spend
+  }
+  annual_results <- rbind(annual_results,
+                          data.frame(LMP, unlucky, lucky))
+}
+
+p <- annual_results %>%
+  mutate(year = row_number() -1) %>%
+  pivot_longer(cols = 1:3, names_to = 'category') %>%
+  mutate(value = ifelse(value <0, NA, value)) %>%
+  ggplot(aes(x = year, y = value, group = category, col = category)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal() +
+  geom_vline(xintercept = c(6, 35), linetype = 'dashed') +
+  geom_hline(yintercept = 0) +
+  theme(legend.position = 'top') +
+  scale_y_continuous(labels = function(x) paste0(x / 1e6, 'm')) +
+  xlim(c(0, 40)) +
+  labs(x = 'Retirement Year',
+       y = 'Portfolio total',
+       title = 'Impact of sequence of returns risk',
+       subtitle = 'Spending 100K/year, with returns averaging 3% per year',
+       caption = 'Lucky group has high returns first 6 years, low in last 6 - unlucky group is reverse\nCombination of poor early returns and spending needs means\nUnlucky group ran out of money before the good returns in the last 5 years') +
+  scale_color_manual(values = c('lucky' = 'green', 'LMP' = 'dodgerblue', unlucky = 'red'))
+#ggplotly(p)
+p
+```
+
+## Interactive SORR
+
+::: {#slider-controls}
+<label for="start_value">Starting Value (USD): </label> <input type="range" id="start_value" min="1000000" max="5000000" value="3000000" step="50000"> [3,000,000]{#start_value_label}<br>
+
+<label for="annual_spend">Annual Spend (USD): </label> <input type="range" id="annual_spend" min="50000" max="200000" value="100000" step="5000"> [100,000]{#annual_spend_label}
+
+<label for="annual_return">Annual Return above inflation (%): </label> <input type="range" id="annual_return" min="0" max="10" value="3" step="0.25"> [3%]{#annual_return_label}
+:::
+
+::: {#plotly-graph style="height: 500px;"}
+:::
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+  // Number format function with commas
+  function formatNumber(num) {
+    return new Intl.NumberFormat().format(num);
+  }
+
+  // Get the slider elements
+  const startValueSlider = document.getElementById('start_value');
+  const startValueLabel = document.getElementById('start_value_label');
+  const spendSlider = document.getElementById('annual_spend');
+  const spendLabel = document.getElementById('annual_spend_label');
+  const returnSlider = document.getElementById('annual_return');
+  const returnLabel = document.getElementById('annual_return_label');
+
+  // Function to update the Plotly graph based on the slider values
+  function updatePlot() {
+    const startValue = parseInt(startValueSlider.value);
+    const annualSpend = parseInt(spendSlider.value);
+    const annualReturn = parseFloat(returnSlider.value);
+    
+    // Prepare data based on the slider values
+    const years = [...Array(41).keys()];
+    const LMPData = [];
+    const unluckyData = [];
+    const luckyData = [];
+
+    // Initialize the portfolio values with the same start value at year 0
+    let LMP = startValue;
+    let unlucky = startValue;
+    let lucky = startValue;
+
+    const badResults = Array.from({ length: 5 }, () => Math.random() * 0.14 - 0.12);
+    const mediumResults = Array.from({ length: 30 }, () => (Math.random() * ((annualReturn*3)/100) - annualReturn/100));
+    const goodResults = Array.from({ length: 5 }, () => Math.random() * 0.12 + 0.06);
+
+    // Simulate the portfolio changes
+    for (let i = 0; i < years.length; i++) {
+      // At time 0, all values should be the same
+      if (i === 0) {
+        LMP = startValue;
+        unlucky = startValue;
+        lucky = startValue;
+      }
+
+      // Ensure that values don't drop below 0
+      if (LMP < 0) LMP = NaN;
+      if (unlucky < 0) unlucky = NaN;
+      if (lucky < 0) lucky = NaN;
+
+      // Update the portfolio values based on the time
+      if (i < 7) {
+        LMP = (LMP >= 0) ? LMP * (1 + (annualReturn / 100)) - annualSpend : NaN;
+        unlucky = (unlucky >= 0) ? unlucky * (1 + badResults[i % 5]) - annualSpend : NaN;
+        lucky = (lucky >= 0) ? lucky * (1 + goodResults[i % 5]) - annualSpend : NaN;
+      } else if (i < 37) {
+        LMP = (LMP >= 0) ? LMP * (1 + (annualReturn / 100)) - annualSpend : NaN;
+        unlucky = (unlucky >= 0) ? unlucky * (1 + mediumResults[i % 30]) - annualSpend : NaN;
+        lucky = (lucky >= 0) ? lucky * (1 + mediumResults[i % 30]) - annualSpend : NaN;
+      } else {
+        LMP = (LMP >= 0) ? LMP * (1 + (annualReturn / 100)) - annualSpend : NaN;
+        unlucky = (unlucky >= 0) ? unlucky * (1 + goodResults[i % 5]) - annualSpend : NaN;
+        lucky = (lucky >= 0) ? lucky * (1 + badResults[i % 5]) - annualSpend : NaN;
+      }
+
+      // If the value goes below 0, stop adding data
+      if (LMP >= 0) LMPData.push(LMP);
+      else LMPData.push(NaN);
+      
+      if (unlucky >= 0) unluckyData.push(unlucky);
+      else unluckyData.push(NaN);
+
+      if (lucky >= 0) luckyData.push(lucky);
+      else luckyData.push(NaN);
+    }
+
+    // Create the plot
+    const trace1 = {
+      x: years,
+      y: LMPData,
+      mode: 'lines+markers',
+      name: 'LMP',
+      line: { color: 'dodgerblue' }
+    };
+    const trace2 = {
+      x: years,
+      y: unluckyData,
+      mode: 'lines+markers',
+      name: 'Unlucky',
+      line: { color: 'red' }
+    };
+    const trace3 = {
+      x: years,
+      y: luckyData,
+      mode: 'lines+markers',
+      name: 'Lucky',
+      line: { color: 'green' }
+    };
+
+    const layout = {
+      title: 'Impact of Sequence of Returns Risk',
+      xaxis: { title: 'Retirement Year' },
+      yaxis: { title: 'Portfolio Total (USD)' },
+      showlegend: true
+    };
+
+    Plotly.newPlot('plotly-graph', [trace1, trace2, trace3], layout);
+  }
+
+  // Update the graph whenever the slider values change
+  startValueSlider.addEventListener('input', function() {
+    startValueLabel.textContent = formatNumber(startValueSlider.value);
+    updatePlot();
+  });
+
+  spendSlider.addEventListener('input', function() {
+    spendLabel.textContent = formatNumber(spendSlider.value);
+    updatePlot();
+  });
+
+  returnSlider.addEventListener('input', function() {
+    returnLabel.textContent = returnSlider.value + '%';
+    updatePlot();
+  });
+
+  // Initial plot when the page loads
+  updatePlot();
+</script>
+
+------------------------------------------------------------------------
+
+## Tradeoffs of an LMP
+
+### 1. Significant Initial Portfolio Allocation
+
+-   Allocating a large portion of the current portfolio to match liabilities may mean sacrificing **liquidity** and **future growth potential**.
+-   60% of the current portfolio will be allocated to TIPS, STRIPS, and other fixed-income securities.
+
+Setting aside this large chunk may reduce available funds for more flexible investments or other opportunities.
+
+## Tradeoffs of an LMP (cont)
+
+### 2. Trading Security for Potential Larger Long-Term Returns
+
+-   This approach **sacrifices the higher EXPECTED long-term returns of stocks** in favor of more secure, stable income from bonds.
+-   Over a long period, stocks generally outperform bonds - this strategy prioritizes **security over potential growth**.
+
+------------------------------------------------------------------------
+
+## Tradeoffs of an LMP (cont.)
+
+### 3. Limited Lifetime of the Matched Portfolio
+
+-   A **liability matched portfolio** can only be expected to cover expenses until around age 85.
+-   May need to explore additional strategies (like annuities) to cover expenses beyond this age.
+
+## Tradeoffs of an LMP (cont.)
+
+### 4. Large Upfront Effort
+
+-   While the long-term management is simplified, the initial setup requires considerable planning, analysis, and adjustment.
+-   **Example**: Assessing and matching liabilities, analyzing future income needs, and selecting the appropriate mix of TIPS, STRIPS, and stocks.
+-   Has to be done across various accounts (403B, Roth IRA, taxable accounts) and mixes individual bonds with duration-matched funds
+
+Cannot be *completely* hands-off until/unless using ladder.
+
+## Tradeoffs of an LMP (cont.)
+
+### 5. Long-term TIPS funds are relatively expensive
+
+-   Approximately 0.20%, roughly double current average
+-   This would come down over time as:
+
+1.  more individual bonds purchased
+2.  fund duration decreases
+
+-   Moving from primarily Target Date Funds to only bond and stock index funds would bring total expense ratio in line with current, and lower in the future
